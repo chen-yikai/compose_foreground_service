@@ -68,8 +68,11 @@ fun PlayGround(context: Context) {
 
     LaunchedEffect(Unit) {
         val intent = Intent(context, MusicService::class.java)
-        context.startForegroundService(intent)
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
         Log.i("kitty", "Service start command sent")
     }
 }

@@ -5,8 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
 import android.os.Build
+import android.os.IBinder
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
@@ -14,12 +16,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.ui.PlayerNotificationManager
 
-class MusicService : MediaSessionService() {
-    private var mediaSession: MediaSession? = null
+class MusicService : Service() {
     private var player: ExoPlayer? = null
 
     @SuppressLint("UnsafeOptInUsageError")
@@ -28,19 +27,17 @@ class MusicService : MediaSessionService() {
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
-        Log.i("kitty", "Service onCreate called")
-
+        Log.i("MusicService", "Service onCreate called")
 
         player = ExoPlayer.Builder(this).build().apply {
             setMediaItem(MediaItem.fromUri("https://skills-music-api.eliaschen.dev/music/ocean.mp3"))
             prepare()
             playWhenReady = true
-            Log.i("kitty", "ExoPlayer initialized and playing")
+            Log.i("MusicService", "player init")
         }
 
-        mediaSession = MediaSession.Builder(this, player!!).build()
-        Log.i("kitty", "MediaSession created")
         createNotificationChannel()
+
         notificationManager = PlayerNotificationManager.Builder(
             this,
             NOTIFICATION_ID,
@@ -61,7 +58,7 @@ class MusicService : MediaSessionService() {
                     )
                 }
 
-                override fun getCurrentContentText(player: Player): CharSequence? {
+                override fun getCurrentContentText(player: Player): CharSequence {
                     return "Music"
                 }
 
@@ -70,29 +67,50 @@ class MusicService : MediaSessionService() {
                     callback: PlayerNotificationManager.BitmapCallback
                 ) = null
             })
+            setNotificationListener(object : PlayerNotificationManager.NotificationListener {
+                override fun onNotificationCancelled(notificationId: Int, dismissedByUser: Boolean) {
+                    stopForeground(true)
+                    stopSelf()
+                }
+
+                override fun onNotificationPosted(
+                    notificationId: Int,
+                    notification: Notification,
+                    ongoing: Boolean
+                ) {
+                    if (ongoing) {
+                        startForeground(notificationId, notification)
+                    } else {
+                        stopForeground(false)
+                    }
+                }
+            })
         }.build().apply {
             setPlayer(player)
-            setMediaSessionToken(mediaSession!!.sessionCompatToken)
         }
 
-        Log.i("kitty", "Service initialization complete")
+        Log.i("MusicService", "service init")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         startForeground(NOTIFICATION_ID, createNotification())
-        Log.i("kitty", "Service started in foreground")
+        Log.i("MusicService", "service start foreground")
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        Log.i("kitty", "Service onDestroy called")
-
-        super.onDestroy()
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.i("MusicService", "onTaskRemoved called")
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.i("MusicService", "Service onDestroy called")
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
     }
 
     private fun createNotificationChannel() {
